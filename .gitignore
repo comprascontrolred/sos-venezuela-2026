@@ -8,3 +8,7 @@ deploy/
 .DS_Store
 Thumbs.db
 .claude/
+
+# Claves de service account de Google (NUNCA commitear)
+*-e6-*.json
+festive-zoo-*.json
