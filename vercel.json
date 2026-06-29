@@ -1,5 +1,4 @@
 {
   "framework": null,
-  "outputDirectory": "dist",
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "outputDirectory": "deploy"
 }
