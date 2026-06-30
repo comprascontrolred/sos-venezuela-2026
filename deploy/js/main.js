@@ -342,7 +342,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function fillModal(method) {
     var en = lang === 'en';
-    var titles = { mp: 'Mercado Pago', pp: 'PayPal', transfer: en ? 'Bank Transfer' : 'Transferencia', crypto: 'Cripto / USDT' };
+    var titles = { mp: 'Mercado Pago', pp: 'PayPal', crypto: 'Cripto / USDT' };
     if (modalTitle) modalTitle.textContent = titles[method] || '';
 
     var amtOpts = [10, 25, 50, 100];
@@ -360,14 +360,6 @@ document.addEventListener('DOMContentLoaded', function () {
     } else if (method === 'pp') {
       body += '<p class="modal-desc">' + (en ? 'You will be redirected to PayPal to complete your donation safely.' : 'Serás redirigido a PayPal para completar tu donación de forma segura.') + '</p>';
       body += '<button class="btn-pay" style="background:#0070ba">' + (en ? 'Pay with PayPal' : 'Pagar con PayPal') + ' →</button>';
-    } else if (method === 'transfer') {
-      var rows = [['Banco', 'Banco — placeholder'], ['CBU', '0000000 00000000000000'], ['Alias', 'SOS.VENEZUELA'], ['Titular', 'Razón social — placeholder']];
-      body = '<div style="border:1px solid #e6ddcf;border-radius:11px;overflow:hidden;margin-bottom:16px">' +
-        rows.map(function (r) { return '<div class="bank-row"><span class="bank-key">' + r[0] + '</span><span class="bank-val">' + r[1] + '</span></div>'; }).join('') +
-        '</div>';
-      body += '<div class="amount-label">' + (en ? 'UPLOAD YOUR RECEIPT' : 'SUBÍ TU COMPROBANTE') + '</div>';
-      body += '<label class="upload-label"><span style="font-size:22px">📎</span><span id="file-label">' + (en ? 'Tap to attach (JPG/PDF)' : 'Tocá para adjuntar (JPG/PDF)') + '</span><input type="file" accept="image/*,application/pdf" style="display:none"></label>';
-      body += '<button class="btn-pay" style="background:#d81e2c;margin-top:12px">' + (en ? 'Send receipt' : 'Enviar comprobante') + ' →</button>';
     } else if (method === 'crypto') {
       body = '<div class="amount-label">USDT · TRC20</div>';
       body += '<div style="border:1px solid #e6ddcf;border-radius:11px;padding:14px;background:#faf7f1;font:600 13px IBM Plex Mono,monospace;color:#17120d;word-break:break-all;margin-bottom:14px">TXxxxxxxxxxxxxxxxxxxxxxxxxxxxxx — placeholder</div>';
@@ -382,11 +374,6 @@ document.addEventListener('DOMContentLoaded', function () {
           modalContent.querySelectorAll('.amount-chip').forEach(function (c) { c.classList.remove('active'); });
           chip.classList.add('active');
         });
-      });
-      var fi = modalContent.querySelector('input[type=file]');
-      if (fi) fi.addEventListener('change', function () {
-        var lbl = modalContent.querySelector('#file-label');
-        if (lbl && fi.files[0]) { lbl.textContent = '✓ ' + fi.files[0].name; lbl.style.color = '#2f9e5e'; }
       });
     }
   }

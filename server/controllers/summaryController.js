@@ -1,37 +1,42 @@
-import { supabase } from "../config/supabase.js";
+import { getDonations, getGastos } from "../services/sheetsAgent.js";
+import { getExchangeRate, toUsd } from "../services/exchangeRate.js";
+
+const round2 = (n) => Math.round(n * 100) / 100;
 
 export async function getSummary(req, res) {
   try {
-    const [donationsRes, expensesRes] = await Promise.all([
-      supabase
-        .from("donations")
-        .select("amount_usd, created_at")
-        .eq("status", "approved"),
-      supabase.from("expenses").select("amount_usd"),
+    const [donations, gastos, rate] = await Promise.all([
+      getDonations(),
+      getGastos(),
+      getExchangeRate(),
     ]);
 
-    const totalRaised = (donationsRes.data || []).reduce(
-      (sum, d) => sum + Number(d.amount_usd),
-      0
-    );
-    const totalExpenses = (expensesRes.data || []).reduce(
-      (sum, e) => sum + Number(e.amount_usd),
-      0
-    );
-    const donationsCount = donationsRes.data?.length || 0;
-    const lastDonation =
-      donationsRes.data?.sort(
-        (a, b) => new Date(b.created_at) - new Date(a.created_at)
-      )[0] || null;
+    const approved = donations.filter((d) => d.status === "approved");
 
-    // Impuestos estimados (IVA 21% sobre gastos documentados)
-    const taxes = Math.round(totalExpenses * 0.21 * 100) / 100;
+    // Recaudado bruto: las donaciones ya se guardan normalizadas a USD.
+    const totalRaised = approved.reduce((sum, d) => sum + Number(d.amount_usd || 0), 0);
+
+    // Comisiones/impuestos: lo que MercadoPago/PayPal descontaron (dato real por donación).
+    const taxes = approved.reduce((sum, d) => sum + Number(d.fee_usd || 0), 0);
+
+    // Gastos: cada factura se convierte a USD según su moneda antes de sumar.
+    const totalExpenses = gastos.reduce(
+      (sum, g) => sum + toUsd(g.total, g.moneda, rate.usdArs),
+      0
+    );
+
+    const donationsCount = approved.length;
+    const lastDonation =
+      approved
+        .slice()
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0] || null;
 
     res.json({
-      totalRaised: Math.round(totalRaised * 100) / 100,
-      totalExpenses: Math.round(totalExpenses * 100) / 100,
-      taxes,
-      balance: Math.round((totalRaised - totalExpenses) * 100) / 100,
+      totalRaised: round2(totalRaised),
+      totalExpenses: round2(totalExpenses),
+      taxes: round2(taxes),
+      // Balance disponible = recaudado − comisiones − gastos
+      balance: round2(totalRaised - taxes - totalExpenses),
       donationsCount,
       lastDonation,
     });

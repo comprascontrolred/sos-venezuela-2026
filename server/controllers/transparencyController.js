@@ -1,40 +1,21 @@
-import { supabase } from "../config/supabase.js";
+import { getTransparencia, getInventario } from "../services/sheetsAgent.js";
 
-export async function list(req, res) {
+export async function listTransparency(req, res) {
   try {
-    let query = supabase
-      .from("transparency_items")
-      .select("*")
-      .order("date", { ascending: false });
-
-    const { type } = req.query;
-    if (type) query = query.eq("type", type);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
+    const data = await getTransparencia();
     res.json(data);
   } catch (err) {
-    console.error("Transparency list error:", err);
-    res.status(500).json({ error: "Error fetching transparency items" });
+    console.error("[transparency] Error:", err.message);
+    res.status(500).json({ error: "Error al leer transparencia" });
   }
 }
 
-export async function create(req, res) {
+export async function listInventario(req, res) {
   try {
-    const { type, title, description, image_url, doc_url, date } = req.body;
-
-    const { data, error } = await supabase
-      .from("transparency_items")
-      .insert({ type, title, description, image_url, doc_url, date })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    res.status(201).json(data);
+    const items = await getInventario();
+    res.json(items.map(({ _row, ...rest }) => rest));
   } catch (err) {
-    console.error("Transparency create error:", err);
-    res.status(500).json({ error: "Error creating transparency item" });
+    console.error("[inventario] Error:", err.message);
+    res.status(500).json({ error: "Error al leer inventario" });
   }
 }

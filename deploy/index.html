@@ -78,12 +78,12 @@
       <span class="live-dot-lg"></span>
       <div>
         <div class="live-label" data-es="TOTAL RECAUDADO EN VIVO" data-en="TOTAL RAISED · LIVE">TOTAL RECAUDADO EN VIVO</div>
-        <div style="display:flex;align-items:baseline;gap:8px"><div class="live-total" id="live-total">U$D 4.820</div><span class="live-currency">USD</span></div>
+        <div style="display:flex;align-items:baseline;gap:8px"><div class="live-total" id="live-total">U$D 0</div><span class="live-currency">USD</span></div>
       </div>
     </div>
     <div class="live-band-right">
-      <div class="live-stat"><div class="live-stat-val" id="live-count">38</div><div class="live-stat-label" data-es="donaciones hoy" data-en="donations today">donaciones hoy</div></div>
-      <div class="live-stat"><div class="live-stat-last" id="live-last">María G. · U$D 50</div><div class="live-stat-label" data-es="última donación" data-en="latest donation">última donación</div></div>
+      <div class="live-stat"><div class="live-stat-val" id="live-count">0</div><div class="live-stat-label" data-es="donaciones hoy" data-en="donations today">donaciones hoy</div></div>
+      <div class="live-stat"><div class="live-stat-last" id="live-last">—</div><div class="live-stat-label" data-es="última donación" data-en="latest donation">última donación</div></div>
     </div>
   </div>
 
@@ -148,11 +148,6 @@
         <div class="pay-name">PayPal</div>
         <div class="pay-detail" data-es="Internacional · U$D" data-en="International · U$D">Internacional · U$D</div>
       </div>
-      <div class="pay-card" data-donate="transfer">
-        <div class="pay-icon" style="background:#17120d;font-size:20px">$</div>
-        <div class="pay-name" data-es="Transferencia" data-en="Bank transfer">Transferencia</div>
-        <div class="pay-detail" data-es="CBU / Alias" data-en="CBU / Alias">CBU / Alias</div>
-      </div>
       <div class="pay-card" data-donate="crypto">
         <div class="pay-icon" style="background:#f7931a;font-size:20px">₿</div>
         <div class="pay-name" data-es="Cripto / USDT" data-en="Crypto / USDT">Cripto / USDT</div>
@@ -203,7 +198,7 @@
     <div class="consol-card">
       <div class="consol-header">
         <div class="consol-header-title" data-es="CONSOLIDADO FINANCIERO" data-en="FINANCIAL SUMMARY">CONSOLIDADO FINANCIERO</div>
-        <div class="consol-header-sub" data-es="Valores demo · se conectan a tu planilla" data-en="Demo values · connect to your sheet">Valores demo · se conectan a tu planilla</div>
+        <div class="consol-header-sub" data-es="Datos en vivo desde la API" data-en="Live data from the API">Datos en vivo desde la API</div>
       </div>
       <div class="consol-grid">
         <div class="consol-cell">
@@ -261,9 +256,7 @@
           <span data-es="CUÁNDO" data-en="WHEN">CUÁNDO</span>
         </div>
         <div id="don-list-body">
-          <div class="don-list-row"><span>Anónimo</span><span class="don-amount">U$D 120</span><span>PayPal · España</span><span style="color:#8a7f73;font-size:11px">hace 12s</span></div>
-          <div class="don-list-row"><span>Carlos M.</span><span class="don-amount">U$D 80</span><span>Mercado Pago · Argentina</span><span style="color:#8a7f73;font-size:11px">hace 48s</span></div>
-          <div class="don-list-row"><span>Lucía R.</span><span class="don-amount">U$D 25</span><span>USDT · Colombia</span><span style="color:#8a7f73;font-size:11px">hace 1m</span></div>
+          <div class="don-list-row" style="grid-template-columns:1fr"><span style="color:#8a7f73" data-es="Cargando donaciones…" data-en="Loading donations…">Cargando donaciones…</span></div>
         </div>
       </div>
     </div>

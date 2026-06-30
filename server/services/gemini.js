@@ -1,0 +1,70 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+const genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+const FACTURA_PROMPT = `Analizá esta imagen de factura/recibo/ticket de compra.
+Respondé SOLO con JSON válido, sin markdown ni texto extra:
+{
+  "tipo": "factura",
+  "proveedor": string,
+  "fecha": "YYYY-MM-DD" | null,
+  "total": number | null,
+  "moneda": "USD" | "ARS" | "VES" | null,
+  "items": [
+    {
+      "producto": string,
+      "cantidad": number,
+      "unidad": string | null,
+      "precio_unitario": number | null
+    }
+  ]
+}
+- proveedor: nombre de la farmacia, droguería o tienda
+- items: TODOS los productos visibles en la factura
+- unidad: "unidades", "cajas", "ampollas", "frascos", etc. null si no figura
+- precio_unitario: precio por unidad si figura, sino null
+- Si no podés leer algún campo, usá null`;
+
+const ENTREGA_PROMPT = (caption) => `El voluntario envió esta foto con el mensaje: "${caption}"
+Respondé SOLO con JSON válido, sin markdown ni texto extra:
+{
+  "tipo": "entrega",
+  "numero_factura": number | null,
+  "hospital": string | null,
+  "descripcion": string
+}
+- numero_factura: el número de factura mencionado en el mensaje
+- hospital: nombre exacto del hospital mencionado
+- descripcion: resumen breve de la entrega (máx 80 caracteres)`;
+
+function isEntrega(caption) {
+  if (!caption) return false;
+  const c = caption.toLowerCase();
+  return c.includes("entrega") && (c.includes("factura") || c.includes("hospital"));
+}
+
+export async function analyzeFactura(imageBase64, mimeType = "image/jpeg") {
+  const result = await model.generateContent([
+    { inlineData: { data: imageBase64, mimeType } },
+    FACTURA_PROMPT,
+  ]);
+  const text = result.response.text().trim().replace(/```json|```/g, "").trim();
+  return JSON.parse(text);
+}
+
+export async function analyzeEntrega(imageBase64, mimeType = "image/jpeg", caption) {
+  const result = await model.generateContent([
+    { inlineData: { data: imageBase64, mimeType } },
+    ENTREGA_PROMPT(caption),
+  ]);
+  const text = result.response.text().trim().replace(/```json|```/g, "").trim();
+  return JSON.parse(text);
+}
+
+export async function classifyAndAnalyze(imageBase64, mimeType = "image/jpeg", caption = "") {
+  if (isEntrega(caption)) {
+    return analyzeEntrega(imageBase64, mimeType, caption);
+  }
+  return analyzeFactura(imageBase64, mimeType);
+}

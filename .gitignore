@@ -1,6 +1,5 @@
 node_modules/
 dist/
-deploy/
 .env
 .env.local
 .env.*.local
@@ -12,3 +11,6 @@ Thumbs.db
 # Claves de service account de Google (NUNCA commitear)
 *-e6-*.json
 festive-zoo-*.json
+
+.vercel
+.env*

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auditoría de Seguridad — SOS Venezuela</title>
+<style>
+  :root{
+    --crit:#c0392b; --high:#e67e22; --med:#d4a017; --low:#3a7bd5; --ok:#2f9e5e;
+    --ink:#1a1a1a; --muted:#666; --line:#ddd; --bg:#fff;
+  }
+  *{box-sizing:border-box}
+  body{
+    font:14px/1.55 "Segoe UI",system-ui,sans-serif;color:var(--ink);
+    max-width:900px;margin:0 auto;padding:40px 32px;background:var(--bg);
+  }
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:-.5px}
+  h2{font-size:19px;margin:34px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--ink)}
+  h3{font-size:15px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 24px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:12px;color:var(--muted);
+        border:1px solid var(--line);padding:12px 16px;border-radius:8px;margin-bottom:8px}
+  .meta b{color:var(--ink)}
+  .scorebox{display:flex;align-items:center;gap:20px;border:1px solid var(--line);
+        border-radius:8px;padding:16px 20px;margin:20px 0}
+  .score{font-size:42px;font-weight:800;line-height:1}
+  .score small{font-size:16px;color:var(--muted);font-weight:500}
+  .grade{font-size:13px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;margin:10px 0 4px;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f5f5f5;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#444}
+  .tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap}
+  .t-crit{background:var(--crit)} .t-high{background:var(--high)}
+  .t-med{background:var(--med)} .t-low{background:var(--low)} .t-ok{background:var(--ok)}
+  .finding{border:1px solid var(--line);border-left:5px solid var(--line);
+           border-radius:6px;padding:14px 18px;margin:14px 0;page-break-inside:avoid}
+  .finding.crit{border-left-color:var(--crit)}
+  .finding.high{border-left-color:var(--high)}
+  .finding.med{border-left-color:var(--med)}
+  .finding.low{border-left-color:var(--low)}
+  .finding .top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px}
+  .finding .id{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--muted)}
+  .finding p{margin:6px 0}
+  .finding .lbl{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:#555}
+  code{font-family:ui-monospace,Consolas,monospace;background:#f3f3f3;padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .fix{background:#f0f7f1;border-radius:5px;padding:8px 12px;margin-top:8px}
+  ul{margin:6px 0;padding-left:22px} li{margin:3px 0}
+  .ok-list li{color:#1e6b40}
+  footer{margin-top:40px;border-top:1px solid var(--line);padding-top:14px;font-size:11px;color:var(--muted)}
+  .noprint{margin:24px 0;text-align:center}
+  .btn{background:var(--ink);color:#fff;border:none;padding:10px 22px;border-radius:6px;
+       font-size:14px;cursor:pointer}
+  @media print{
+    body{padding:0;max-width:none}
+    .noprint{display:none}
+    h2{page-break-after:avoid}
+    .finding{box-shadow:none}
+    a{color:var(--ink);text-decoration:none}
+  }
+</style>
+</head>
+<body>
+
+<div class="noprint">
+  <button class="btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+</div>
+
+<h1>Auditoría de Seguridad</h1>
+<p class="sub">Plataforma de donaciones <b>SOS Venezuela</b> — backend Node/Express + frontend estático + integraciones (MercadoPago, PayPal, USDT/TRON, Google Sheets/Drive, Gemini, WhatsApp).</p>
+
+<div class="meta">
+  <span><b>Fecha:</b> 30 de junio de 2026</span>
+  <span><b>Alcance:</b> server/, deploy/, config de despliegue, historial git</span>
+  <span><b>Tipo:</b> Revisión de código estática (caja blanca)</span>
+  <span><b>Branch:</b> main</span>
+</div>
+
+<div class="scorebox">
+  <div>
+    <div class="score">5,5<small>/10</small></div>
+    <div class="grade">Riesgo: <b style="color:var(--high)">ALTO</b></div>
+  </div>
+  <div style="font-size:13px;color:#444">
+    Base sólida en varios puntos (firma de WhatsApp, escape de HTML, verificación de pagos
+    server-side, sin secretos en git), pero <b>3 vulnerabilidades críticas</b> exponen recursos
+    de Google y permiten fraude/abuso de donaciones. <b>No apto para producción</b> sin
+    remediar los puntos críticos y altos.
+  </div>
+</div>
+
+<h2>1. Resumen de hallazgos</h2>
+<table>
+  <thead><tr><th>#</th><th>Severidad</th><th>Hallazgo</th><th>Componente</th></tr></thead>
+  <tbody>
+    <tr><td>C-01</td><td><span class="tag t-crit">CRÍTICO</span></td><td>Endpoint de subida de archivos sin autenticación + archivos públicos en Drive</td><td>routes/upload.js, services/driveUpload.js</td></tr>
+    <tr><td>C-02</td><td><span class="tag t-crit">CRÍTICO</span></td><td>Webhook de MercadoPago sin verificación de firma</td><td>controllers/donationsController.js</td></tr>
+    <tr><td>C-03</td><td><span class="tag t-crit">CRÍTICO</span></td><td>Clave privada del service account de Google en texto plano en carpeta sincronizada a la nube</td><td>festive-zoo-*.json (OneDrive)</td></tr>
+    <tr><td>H-01</td><td><span class="tag t-high">ALTO</span></td><td>Ausencia total de rate limiting</td><td>server/index.js (global)</td></tr>
+    <tr><td>H-02</td><td><span class="tag t-high">ALTO</span></td><td>Sin validación de montos en donaciones (negativos/cero/no numéricos)</td><td>donationsController.js</td></tr>
+    <tr><td>H-03</td><td><span class="tag t-high">ALTO</span></td><td>Middleware adminAuth definido pero nunca aplicado a ninguna ruta</td><td>middlewares/adminAuth.js</td></tr>
+    <tr><td>M-01</td><td><span class="tag t-med">MEDIO</span></td><td>CORS permite peticiones sin cabecera Origin</td><td>server/index.js</td></tr>
+    <tr><td>M-02</td><td><span class="tag t-med">MEDIO</span></td><td>Sin Helmet ni cabeceras de seguridad HTTP</td><td>server/index.js</td></tr>
+    <tr><td>M-03</td><td><span class="tag t-med">MEDIO</span></td><td>Inyección de fórmulas (CSV injection) al exportar Sheets a Excel</td><td>services/sheetsAgent.js</td></tr>
+    <tr><td>M-04</td><td><span class="tag t-med">MEDIO</span></td><td>Dependencia multer 1.x (rama con CVEs conocidos)</td><td>server/package.json</td></tr>
+    <tr><td>L-01</td><td><span class="tag t-low">BAJO</span></td><td>Prompt injection vía caption de WhatsApp si la allowlist está vacía</td><td>services/gemini.js, whatsappController.js</td></tr>
+    <tr><td>L-02</td><td><span class="tag t-low">BAJO</span></td><td>WHATSAPP_VERIFY_TOKEN predecible/hardcodeado en .env.example</td><td>.env.example</td></tr>
+    <tr><td>L-03</td><td><span class="tag t-low">BAJO</span></td><td>order_id del cliente interpolado en URL de PayPal sin validar formato</td><td>config/paypal.js</td></tr>
+  </tbody>
+</table>
+
+<h2>2. Hallazgos críticos</h2>
+
+<div class="finding crit">
+  <div class="top"><h3>Subida de archivos sin autenticación + visibilidad pública en Drive</h3><span class="id">C-01</span></div>
+  <p class="lbl">Descripción</p>
+  <p><code>POST /api/upload</code> no exige ninguna autenticación. Acepta archivos de hasta 10 MB y los envía a Google Drive. Peor aún, <code>driveUpload.js</code> aplica a cada archivo el permiso <code>{ role: "reader", type: "anyone" }</code>, haciéndolos accesibles públicamente.</p>
+  <p class="lbl">Impacto</p>
+  <p>Cualquier persona en internet puede: (1) llenar tu Drive hasta agotar la cuota, (2) usar tu cuenta de Google como hosting gratuito de archivos arbitrarios (incluido malware o contenido ilícito) con URLs públicas, generando responsabilidad legal y posible suspensión de la cuenta.</p>
+  <div class="fix"><p class="lbl">Remediación</p>
+  <ul>
+    <li>Proteger la ruta con autenticación (el <code>adminAuth</code> ya existe) o eliminarla si el público no necesita subir nada.</li>
+    <li>No marcar los archivos como <code>type: "anyone"</code>; servirlos mediante enlaces firmados temporales o a través del backend.</li>
+    <li>Validar contenido real del archivo (magic bytes), no solo el <code>mimetype</code> declarado.</li>
+    <li>Aplicar rate limiting estricto y límite de tamaño por IP.</li>
+  </ul></div>
+</div>
+
+<div class="finding crit">
+  <div class="top"><h3>Webhook de MercadoPago sin verificación de firma</h3><span class="id">C-02</span></div>
+  <p class="lbl">Descripción</p>
+  <p><code>mpWebhook</code> procesa el cuerpo del POST sin validar la firma <code>x-signature</code>. La variable <code>MP_WEBHOOK_SECRET</code> está declarada en <code>.env.example</code> pero <b>no se usa en ningún lugar del código</b>.</p>
+  <p class="lbl">Impacto</p>
+  <p>Un atacante puede enviar notificaciones falsas a <code>/api/donations/mp/webhook</code>. Aunque el código vuelve a consultar el pago en la API de MP (lo que limita el fraude directo), un atacante puede forzar llamadas masivas a la API de MercadoPago (agotamiento de rate limit / DoS) y, si reutiliza IDs de pagos aprobados reales, registrar donaciones duplicadas en la planilla y en el ticker en vivo.</p>
+  <div class="fix"><p class="lbl">Remediación</p>
+  <ul>
+    <li>Verificar la firma HMAC del webhook con <code>MP_WEBHOOK_SECRET</code> antes de procesar (igual que ya se hace bien en el webhook de WhatsApp).</li>
+    <li>Deduplicar por ID de pago para evitar registros repetidos.</li>
+  </ul></div>
+</div>
+
+<div class="finding crit">
+  <div class="top"><h3>Clave privada de Google en texto plano dentro de OneDrive</h3><span class="id">C-03</span></div>
+  <p class="lbl">Descripción</p>
+  <p>El archivo <code>festive-zoo-500813-e6-1b8bc5233350.json</code> contiene la clave privada del service account (<code>"private_key": "-----BEGIN PRIVATE KEY-----..."</code>). Está correctamente listado en <code>.gitignore</code> (no se commitea), pero reside en <code>C:\Users\venta\OneDrive\...</code>, una carpeta sincronizada a la nube de Microsoft.</p>
+  <p class="lbl">Impacto</p>
+  <p>La clave da acceso de lectura/escritura a tus Google Sheets y Drive. Al estar en OneDrive queda replicada en servidores de Microsoft y expuesta a cualquiera con acceso a esa cuenta o al equipo. Si se filtra, un tercero puede manipular los registros de transparencia de las donaciones.</p>
+  <div class="fix"><p class="lbl">Remediación</p>
+  <ul>
+    <li>Mover el proyecto fuera de OneDrive, o excluir la carpeta de la sincronización.</li>
+    <li>En producción, cargar las credenciales solo desde variables de entorno (como ya prevé <code>GOOGLE_SERVICE_ACCOUNT_JSON</code>) y borrar el archivo físico.</li>
+    <li>Dado que la clave ya estuvo en una carpeta sincronizada, <b>rotarla</b> en Google Cloud por precaución.</li>
+  </ul></div>
+</div>
+
+<h2>3. Hallazgos altos</h2>
+
+<div class="finding high">
+  <div class="top"><h3>Ausencia total de rate limiting</h3><span class="id">H-01</span></div>
+  <p>Ningún endpoint tiene límite de peticiones. Combinado con C-01 y H-02, permite spam de donaciones falsas vía <code>/api/donations/transfer</code>, abuso de subidas y agotamiento de cuotas de Gemini, Sheets y Drive (costos reales).</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Agregar <code>express-rate-limit</code> con límites por IP, más estrictos en escritura (upload, transfer, webhooks).</p></div>
+</div>
+
+<div class="finding high">
+  <div class="top"><h3>Sin validación de montos de donación</h3><span class="id">H-02</span></div>
+  <p><code>mpCreate</code>, <code>paypalCreate</code> y <code>transferCreate</code> hacen <code>Number(amount)</code> sin validar que sea positivo, finito y dentro de un rango razonable. Se pueden inyectar montos negativos, cero o absurdos que contaminan las estadísticas y el ticker en vivo.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Validar <code>amount</code> como número finito &gt; 0 y &le; un máximo; rechazar el resto con HTTP 400. Reforzar <code>validateBody</code> con validación de tipo/rango (ej. zod).</p></div>
+</div>
+
+<div class="finding high">
+  <div class="top"><h3>adminAuth nunca se aplica</h3><span class="id">H-03</span></div>
+  <p>El middleware <code>adminAuth</code> existe pero no protege ninguna ruta (código muerto). No hay ningún endpoint con control de acceso administrativo. Adicionalmente, la comparación de la API key con <code>!==</code> no es de tiempo constante.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Aplicar <code>adminAuth</code> a las rutas sensibles (empezando por upload). Comparar la clave con <code>crypto.timingSafeEqual</code>.</p></div>
+</div>
+
+<h2>4. Hallazgos medios y bajos</h2>
+
+<div class="finding med">
+  <div class="top"><h3>CORS permite peticiones sin Origin</h3><span class="id">M-01</span></div>
+  <p>En <code>index.js</code>, <code>if (!origin || allowedOrigins.includes(origin))</code> autoriza cualquier petición sin cabecera <code>Origin</code> (curl, scripts, server-to-server). Junto con endpoints sin auth, facilita el abuso automatizado.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>No depender de CORS como control de seguridad; complementar con autenticación y rate limiting. Restringir el "sin Origin" solo a casos estrictamente necesarios.</p></div>
+</div>
+
+<div class="finding med">
+  <div class="top"><h3>Sin cabeceras de seguridad HTTP</h3><span class="id">M-02</span></div>
+  <p>No se usa <code>helmet</code>. Faltan <code>Content-Security-Policy</code>, <code>X-Content-Type-Options</code>, <code>HSTS</code>, etc.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Agregar <code>app.use(helmet())</code> y definir una CSP acorde al frontend.</p></div>
+</div>
+
+<div class="finding med">
+  <div class="top"><h3>Inyección de fórmulas (CSV injection)</h3><span class="id">M-03</span></div>
+  <p>El uso de <code>valueInputOption: "RAW"</code> previene la ejecución de fórmulas dentro de Sheets (correcto). Sin embargo, un <code>donor_name</code> como <code>=HYPERLINK(...)</code> se ejecutaría si alguien exporta la planilla a CSV/Excel.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Anteponer un apóstrofo o espacio a valores de usuario que empiecen con <code>= + - @</code> antes de escribirlos.</p></div>
+</div>
+
+<div class="finding med">
+  <div class="top"><h3>multer 1.x con CVEs conocidos</h3><span class="id">M-04</span></div>
+  <p><code>multer@^1.4.5-lts.2</code> pertenece a una rama con vulnerabilidades reportadas de denegación de servicio.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Actualizar a multer 2.x y ejecutar <code>npm audit</code> periódicamente.</p></div>
+</div>
+
+<div class="finding low">
+  <div class="top"><h3>Prompt injection vía caption de WhatsApp</h3><span class="id">L-01</span></div>
+  <p>El <code>caption</code> del usuario se inserta directamente en el prompt de Gemini. Si <code>WHATSAPP_ALLOWED_NUMBERS</code> está vacío, <code>ALLOWED.size === 0</code> deshabilita el filtro y acepta a cualquier remitente, permitiendo manipular la clasificación/salida que va a las planillas.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Exigir allowlist no vacía (fallar cerrado). Tratar la salida de Gemini como no confiable y validar su esquema.</p></div>
+</div>
+
+<div class="finding low">
+  <div class="top"><h3>Verify token de WhatsApp predecible</h3><span class="id">L-02</span></div>
+  <p><code>WHATSAPP_VERIFY_TOKEN=sos-venezuela-2026</code> aparece como valor por defecto en <code>.env.example</code>. Si se reutiliza tal cual, es adivinable.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Generar un token aleatorio largo por entorno; no dejar valores por defecto reales en el ejemplo.</p></div>
+</div>
+
+<div class="finding low">
+  <div class="top"><h3>order_id sin validar en URL de PayPal</h3><span class="id">L-03</span></div>
+  <p><code>captureOrder</code> interpola <code>orderId</code> del cliente en la URL sin validar formato. El riesgo es bajo (es contra la API de PayPal), pero conviene validarlo.</p>
+  <div class="fix"><p class="lbl">Remediación</p><p>Validar que <code>order_id</code> coincida con el formato esperado de PayPal antes de usarlo.</p></div>
+</div>
+
+<h2>5. Lo que está bien hecho</h2>
+<ul class="ok-list">
+  <li><b>Sin secretos en el historial de git:</b> ni <code>.env</code> ni el JSON del service account fueron commiteados.</li>
+  <li><b>Webhook de WhatsApp seguro:</b> verifica firma HMAC-SHA256 con <code>crypto.timingSafeEqual</code> y falla cerrado si falta el secret.</li>
+  <li><b>XSS mitigado en el frontend:</b> el render usa <code>escapeHtml</code> sobre datos de usuario (nombre de donante, etc.).</li>
+  <li><b>Pagos verificados server-side:</b> MercadoPago se reconsulta con <code>paymentClient.get</code> y PayPal valida estado <code>COMPLETED</code>; los montos no se confían desde el cliente.</li>
+  <li><b>Sheets en modo RAW:</b> evita la evaluación de fórmulas dentro de la planilla.</li>
+  <li><b>Monitor TRON deduplica</b> por <code>tx_hash</code>, evitando donaciones USDT duplicadas.</li>
+</ul>
+
+<h2>6. Plan de remediación priorizado</h2>
+<table>
+  <thead><tr><th>Prioridad</th><th>Acción</th><th>Esfuerzo</th></tr></thead>
+  <tbody>
+    <tr><td>1 — Inmediato</td><td>Proteger/eliminar <code>/api/upload</code> y quitar permiso público de Drive (C-01)</td><td>Bajo</td></tr>
+    <tr><td>2 — Inmediato</td><td>Mover el proyecto fuera de OneDrive y rotar la clave del service account (C-03)</td><td>Bajo</td></tr>
+    <tr><td>3 — Esta semana</td><td>Verificar firma del webhook de MercadoPago (C-02)</td><td>Medio</td></tr>
+    <tr><td>4 — Esta semana</td><td>Agregar rate limiting y validación de montos (H-01, H-02)</td><td>Medio</td></tr>
+    <tr><td>5 — Esta semana</td><td>Aplicar adminAuth a rutas sensibles (H-03)</td><td>Bajo</td></tr>
+    <tr><td>6 — Mantenimiento</td><td>Helmet, sanitizar CSV, actualizar multer, allowlist obligatoria (M/L)</td><td>Bajo</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  Informe generado el 30/06/2026 mediante revisión estática de código. No sustituye una prueba de penetración dinámica sobre el entorno desplegado. Las severidades son cualitativas (CVSS aproximado). Proyecto: SOS Venezuela — donaciones.
+</footer>
+
+</body>
+</html>

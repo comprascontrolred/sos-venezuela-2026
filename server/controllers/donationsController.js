@@ -1,33 +1,45 @@
-import { supabase } from "../config/supabase.js";
 import { preferenceClient, paymentClient } from "../config/mercadopago.js";
 import { createOrder, captureOrder } from "../config/paypal.js";
-import { appendDonation } from "../config/sheets.js";
+import { registerDonation, getDonations } from "../services/sheetsAgent.js";
 import { getExchangeRate, arsToUsd } from "../services/exchangeRate.js";
 import { broadcast } from "../services/sseManager.js";
 
 async function insertAndBroadcast(donation) {
-  const { data, error } = await supabase
-    .from("donations")
-    .insert(donation)
-    .select()
-    .single();
-
-  if (error) throw error;
+  const data = await registerDonation(donation);
 
   if (data.status === "approved") {
     broadcast({
       id: data.id,
       name: data.donor_name,
       amount: data.amount_usd,
-      currency: "USD",
+      currency: data.currency,
     });
-
-    appendDonation(data).catch((err) =>
-      console.error("Sheets sync failed:", err.message)
-    );
   }
 
   return data;
+}
+
+// ── Listado público (para la tabla del frontend) ──
+
+export async function listDonations(req, res) {
+  try {
+    const all = await getDonations();
+    const approved = all
+      .filter((d) => d.status === "approved")
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+      .slice(0, 50)
+      .map((d) => ({
+        donor_name: d.donor_name || "Anónimo",
+        amount_usd: Number(d.amount_usd) || 0,
+        currency: d.currency,
+        method: d.method,
+        created_at: d.created_at,
+      }));
+    res.json(approved);
+  } catch (err) {
+    console.error("List donations error:", err);
+    res.status(500).json({ error: "Error fetching donations" });
+  }
 }
 
 // ── Mercado Pago ──
@@ -77,7 +89,11 @@ export async function mpWebhook(req, res) {
 
     const rate = await getExchangeRate();
     const amountArs = payment.transaction_amount;
+    // Comisión + retenciones reales: bruto − neto recibido (dato que informa MP).
+    const netArs = payment.transaction_details?.net_received_amount ?? amountArs;
+    const feeArs = Math.max(0, amountArs - netArs);
     const amountUsd = arsToUsd(amountArs, rate.usdArs);
+    const feeUsd = arsToUsd(feeArs, rate.usdArs);
 
     let donorName = "Anónimo";
     try {
@@ -93,6 +109,7 @@ export async function mpWebhook(req, res) {
       method: "mercadopago",
       country: "AR",
       status: "approved",
+      fee_usd: feeUsd,
     });
 
     res.sendStatus(200);
@@ -106,7 +123,7 @@ export async function mpWebhook(req, res) {
 
 export async function paypalCreate(req, res) {
   try {
-    const { amount, donor_name } = req.body;
+    const { amount } = req.body;
     const order = await createOrder(Number(amount));
     res.json({ id: order.id, links: order.links });
   } catch (err) {
@@ -124,9 +141,11 @@ export async function paypalCapture(req, res) {
       return res.status(400).json({ error: "Payment not completed" });
     }
 
-    const amountUsd = Number(
-      capture.purchase_units[0].payments.captures[0].amount.value
-    );
+    const captureData = capture.purchase_units[0].payments.captures[0];
+    const breakdown = captureData.seller_receivable_breakdown || {};
+    // PayPal informa el bruto y su comisión en seller_receivable_breakdown.
+    const amountUsd = Number(breakdown.gross_amount?.value ?? captureData.amount.value);
+    const feeUsd = Number(breakdown.paypal_fee?.value ?? 0);
 
     const data = await insertAndBroadcast({
       donor_name: donor_name || "Anónimo",
@@ -136,44 +155,12 @@ export async function paypalCapture(req, res) {
       method: "paypal",
       country: "INT",
       status: "approved",
+      fee_usd: feeUsd,
     });
 
     res.json({ donation: data });
   } catch (err) {
     console.error("PayPal capture error:", err);
     res.status(500).json({ error: "Error capturing PayPal payment" });
-  }
-}
-
-// ── Transferencia manual ──
-
-export async function transferCreate(req, res) {
-  try {
-    const { donor_name, amount, currency, receipt_url, country } = req.body;
-
-    let amountUsd = Number(amount);
-    const amountOriginal = amountUsd;
-
-    if (currency === "ARS") {
-      const rate = await getExchangeRate();
-      amountUsd = arsToUsd(amountUsd, rate.usdArs);
-    }
-    // USDT entra directo como USD
-
-    const data = await insertAndBroadcast({
-      donor_name: donor_name || "Anónimo",
-      amount_usd: amountUsd,
-      amount_original: amountOriginal,
-      currency: currency || "ARS",
-      method: "transfer",
-      country: country || "AR",
-      status: "pending",
-      receipt_url,
-    });
-
-    res.json({ donation: data });
-  } catch (err) {
-    console.error("Transfer error:", err);
-    res.status(500).json({ error: "Error registering transfer" });
   }
 }

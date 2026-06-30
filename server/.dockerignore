@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.env
+.env.*
+*.log
+.git
+.gitignore
+.DS_Store
+
+# Credenciales de service account — NUNCA dentro de la imagen
+*-e6-*.json
+festive-zoo-*.json
+*service-account*.json
