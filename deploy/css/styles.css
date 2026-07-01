@@ -301,7 +301,7 @@ a { text-decoration: none; color: inherit; }
 .pay-section { padding: 48px 34px; background: #f1ece2; }
 .pay-header { display: flex; align-items: end; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
 .pay-sub { font: 500 13px 'Public Sans', sans-serif; color: #6f655a; max-width: 300px; text-align: right; }
-.pay-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+.pay-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 .pay-card {
   background: #fff;
   border: 1.5px solid #e6ddcf;
