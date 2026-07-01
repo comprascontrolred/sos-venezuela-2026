@@ -2,7 +2,7 @@ import { sheets, SPREADSHEET_ID } from "../config/google.js";
 import { v4 as uuid } from "uuid";
 
 // ── Similitud de productos (Jaccard sobre tokens) ──────────────────────────
-function similarity(a, b) {
+export function similarity(a, b) {
   const tokens = (s) => new Set(s.toLowerCase().replace(/[^a-záéíóúñ0-9]/gi, " ").trim().split(/\s+/).filter(Boolean));
   const ta = tokens(a);
   const tb = tokens(b);
@@ -253,6 +253,80 @@ export async function getNecesidades() {
   const rows = res.data.values ?? [];
   const headers = ["id", "descripcion", "organizacion", "prioridad", "estado", "fecha"];
   return rows.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])));
+}
+
+// ── Pedidos (gente externa que pide ayuda por WhatsApp) ─────────────────────
+
+const PEDIDO_MATCH_THRESHOLD = 0.3; // más laxo que facturas: acá es lenguaje natural, no OCR
+
+async function matchearProductos(productos) {
+  const inventario = await getInventario();
+  return productos.map((producto) => ({
+    producto,
+    en_stock: inventario.some((item) => similarity(item.producto, producto) >= PEDIDO_MATCH_THRESHOLD),
+  }));
+}
+
+function calcularCobertura(productosMatch) {
+  if (productosMatch.every((p) => p.en_stock)) return "total";
+  if (productosMatch.some((p) => p.en_stock)) return "parcial";
+  return "ninguna";
+}
+
+export async function registerPedido({ nombre, telefono, direccion, tipo_lugar, productos, whatsappFrom }) {
+  const id = uuid();
+  const fecha = new Date().toISOString().split("T")[0];
+  const productosMatch = await matchearProductos(productos);
+  const cobertura = calcularCobertura(productosMatch);
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: "Pedidos!A:I",
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [[id, fecha, nombre ?? "", telefono ?? "", direccion ?? "", tipo_lugar ?? "", JSON.stringify(productosMatch), cobertura, whatsappFrom]],
+    },
+  });
+
+  return { id, cobertura, productos: productosMatch };
+}
+
+export async function getPedidos() {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "Pedidos!A:I" });
+  const rows = res.data.values ?? [];
+  const headers = ["id", "fecha", "nombre", "telefono", "direccion", "tipo_lugar", "productos_json", "cobertura", "from"];
+  return rows.slice(1).map((r, i) => {
+    const obj = Object.fromEntries(headers.map((h, j) => [h, r[j] ?? ""]));
+    try { obj.productos = JSON.parse(obj.productos_json); } catch { obj.productos = []; }
+    obj._row = i + 2;
+    return obj;
+  });
+}
+
+export async function revisarPedidosPendientes() {
+  const pedidos = (await getPedidos()).filter((p) => p.cobertura !== "total");
+  const cubiertosAhora = [];
+
+  for (const pedido of pedidos) {
+    const nombresProductos = pedido.productos.map((p) => p.producto);
+    const productosMatch = await matchearProductos(nombresProductos);
+    const cobertura = calcularCobertura(productosMatch);
+
+    if (cobertura !== pedido.cobertura) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Pedidos!G${pedido._row}:H${pedido._row}`,
+        valueInputOption: "RAW",
+        requestBody: { values: [[JSON.stringify(productosMatch), cobertura]] },
+      });
+    }
+
+    if (cobertura === "total" && pedido.cobertura !== "total") {
+      cubiertosAhora.push({ nombre: pedido.nombre, telefono: pedido.telefono, direccion: pedido.direccion });
+    }
+  }
+
+  return cubiertosAhora;
 }
 
 // ── Transparencia pública ──────────────────────────────────────────────────

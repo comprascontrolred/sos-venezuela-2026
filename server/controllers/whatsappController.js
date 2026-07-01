@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import axios from "axios";
-import { analyzeFactura, analyzeEntrega } from "../services/gemini.js";
+import { analyzeFactura, analyzeEntrega, analizarNecesidad } from "../services/gemini.js";
 import { uploadToDrive } from "../services/driveUpload.js";
 import {
   registerFactura,
@@ -11,6 +11,8 @@ import {
   getInventario,
   getNecesidades,
   getVoluntario,
+  registerPedido,
+  revisarPedidosPendientes,
   getSession,
   setSession,
   clearSession,
@@ -20,6 +22,7 @@ const WA_TOKEN     = process.env.WHATSAPP_TOKEN;
 const WA_PHONE_ID  = process.env.WHATSAPP_PHONE_ID;
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const APP_SECRET   = process.env.WHATSAPP_APP_SECRET;
+const ADMIN_NUMBER = process.env.ADMIN_WHATSAPP_NUMBER;
 
 const ALLOWED = new Set(
   (process.env.WHATSAPP_ALLOWED_NUMBERS || "").split(",").map((n) => n.trim()).filter(Boolean)
@@ -43,6 +46,15 @@ async function sendReply(to, body) {
     { messaging_product: "whatsapp", to, type: "text", text: { body } },
     { headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" } }
   );
+}
+
+async function notifyAdmin(text) {
+  if (!ADMIN_NUMBER) return;
+  try {
+    await sendReply(ADMIN_NUMBER, text);
+  } catch (err) {
+    console.error("[WA] Error notificando al admin:", err.message);
+  }
 }
 
 // buttons: array de hasta 3 { id, title }
@@ -118,6 +130,17 @@ async function handleFactura(from, buffer, mimeType) {
     await upsertInventarioItem(item);
   }
 
+  // Re-chequear pedidos pendientes: puede que este stock nuevo termine de cubrir alguno
+  const pedidosCubiertos = await revisarPedidosPendientes();
+  for (const p of pedidosCubiertos) {
+    await notifyAdmin(
+      `✅ *Pedido cubierto* — ya hay stock para entregarle a:\n` +
+      `👤 ${p.nombre} — 📞 ${p.telefono}\n` +
+      `📍 ${p.direccion}\n` +
+      `Contactate para coordinar la entrega.`
+    );
+  }
+
   const itemsResumen = (data.items ?? [])
     .map((i) => `• ${i.producto} x${i.cantidad}`)
     .join("\n");
@@ -181,11 +204,36 @@ const MENU_ROWS = [
   { id: "menu_salir", title: "🚪 Salir" },
 ];
 
-// Cualquier estado post-saludo donde "Salir" (botón o texto) corta la sesión en cualquier momento
-const ESTADOS_CON_SALIR = [
-  "esperando_membresia", "esperando_cedula", "esperando_pin", "auth_fallida",
+const MENSAJE_BIENVENIDA =
+  "¡Hola! 🇦🇷🇻🇪 Somos SOS Venezuela, una iniciativa de *Control Red*, *Redvision* y *Caracas Market* — " +
+  "empresas argentinas que decidimos ayudar a nuestros hermanos venezolanos. Contamos con equipo propio " +
+  "operando directamente en Caracas, así que podemos asegurarnos de que la ayuda realmente llegue, y " +
+  "estamos para acompañarte en lo que necesites.\n\n¿Sos parte del equipo de voluntarios?";
+
+const BOTONES_MEMBRESIA = [
+  { id: "soy_voluntario", title: "Sí, soy voluntario" },
+  { id: "necesito_ayuda", title: "Necesito ayuda" },
+];
+
+async function sendBienvenida(from) {
+  await sendButtons(from, MENSAJE_BIENVENIDA, BOTONES_MEMBRESIA);
+  await setSession(from, "esperando_membresia");
+}
+
+// Estados de voluntario (post-login o intentando loguearse) vs. rama de gente que pide ayuda —
+// cada grupo corta la sesión con un mensaje de despedida distinto.
+const ESTADOS_SALIR_VOLUNTARIO = [
+  "esperando_cedula", "esperando_pin", "auth_fallida",
   "menu", "esperando_num_entrega", "esperando_foto_factura", "esperando_foto_entrega",
 ];
+const ESTADOS_SALIR_AYUDA = [
+  "esperando_membresia", "post_inventario_ayuda",
+  "pedido_nombre", "pedido_telefono", "pedido_direccion", "pedido_tipo_lugar", "pedido_productos",
+];
+const MENSAJE_SALIDA_VOLUNTARIO =
+  "🙏 ¡Muchas gracias por ayudarnos a lograr esta gran tarea! Argentina y Venezuela son países hermanos. Nos vemos pronto 🇦🇷🇻🇪";
+const MENSAJE_SALIDA_AYUDA =
+  "Gracias por escribirnos 🙏. No estás solo/a en esto — si necesitás algo más, escribí *hola* cuando quieras y seguimos donde quedamos.";
 
 async function sendMenu(from, nombre) {
   await sendList(from, `¡Hola ${nombre || ""}! ¿Qué querés hacer?`, "Elegir opción", MENU_ROWS);
@@ -222,6 +270,47 @@ async function enviarNecesidadesTexto(from) {
   await sendReply(from, `🆘 *Necesidades actuales:*\n${texto}`);
 }
 
+const TIPO_LUGAR_BOTONES = [
+  { id: "lugar_particular", title: "Particular" },
+  { id: "lugar_hospital", title: "Hospital" },
+  { id: "lugar_acopio", title: "Centro de acopio" },
+];
+
+const TIPO_LUGAR_LABEL = {
+  lugar_particular: "Particular",
+  lugar_hospital: "Hospital",
+  lugar_acopio: "Centro de acopio",
+};
+
+function checklistProductos(productosMatch) {
+  return productosMatch.map((p) => `${p.en_stock ? "✅" : "❌"} ${p.producto}`).join("\n");
+}
+
+async function finalizarPedido(from, data, productos) {
+  const resultado = await registerPedido({
+    nombre: data.nombre,
+    telefono: data.telefono,
+    direccion: data.direccion,
+    tipo_lugar: data.tipo_lugar,
+    productos,
+    whatsappFrom: from,
+  });
+
+  const checklist = checklistProductos(resultado.productos);
+  await sendReply(
+    from,
+    `🙏 Ya registramos tu pedido. No estás solo/a en esto — nos vamos a contactar apenas podamos coordinar la entrega.\n\n` +
+    `*Lo que pediste:*\n${checklist}`
+  );
+
+  await notifyAdmin(
+    `🆘 *Pedido nuevo*\n` +
+    `👤 ${data.nombre} — 📞 ${data.telefono}\n` +
+    `📍 ${data.direccion} (${TIPO_LUGAR_LABEL[data.tipo_lugar] || data.tipo_lugar})\n\n` +
+    `${checklist}\n\nCobertura: ${resultado.cobertura}`
+  );
+}
+
 // ── Dispatcher de conversación ──────────────────────────────────────────────
 
 async function handleIncomingMessage(from, msg) {
@@ -236,19 +325,16 @@ async function handleIncomingMessage(from, msg) {
   const esImagen = msg.type === "image";
 
   const quiereSalir = buttonId === "menu_salir" || texto.toLowerCase() === "salir";
-  if (ESTADOS_CON_SALIR.includes(estado) && quiereSalir) {
-    await sendReply(from, "👋 Sesión cerrada. Escribí *hola* cuando quieras volver a empezar.");
+  if (quiereSalir && (ESTADOS_SALIR_VOLUNTARIO.includes(estado) || ESTADOS_SALIR_AYUDA.includes(estado))) {
+    const mensaje = ESTADOS_SALIR_VOLUNTARIO.includes(estado) ? MENSAJE_SALIDA_VOLUNTARIO : MENSAJE_SALIDA_AYUDA;
+    await sendReply(from, mensaje);
     await clearSession(from);
     return;
   }
 
   switch (estado) {
     case "inicio": {
-      await sendButtons(from, "¡Hola! Somos SOS Venezuela 🇻🇪\n¿Sos parte del equipo de voluntarios?", [
-        { id: "soy_voluntario", title: "Sí, soy voluntario" },
-        { id: "necesito_ayuda", title: "Necesito ayuda" },
-      ]);
-      await setSession(from, "esperando_membresia");
+      await sendBienvenida(from);
       return;
     }
 
@@ -257,15 +343,78 @@ async function handleIncomingMessage(from, msg) {
         await sendReply(from, "Decime tu número de cédula (podés escribir 'salir' en cualquier momento para cortar):");
         await setSession(from, "esperando_cedula");
       } else if (buttonId === "necesito_ayuda") {
-        await sendReply(from, "Esta opción va a estar disponible muy pronto 🙏. Por ahora escribinos a nuestras redes.");
-        await clearSession(from);
+        await enviarInventarioTexto(from);
+        await sendButtons(from, "¿Pudiste encontrar lo que buscabas?", [
+          { id: "si_encontro", title: "Sí" },
+          { id: "no_encontro", title: "No" },
+        ]);
+        await setSession(from, "post_inventario_ayuda");
       } else {
-        await sendButtons(from, "Elegí una opción:", [
-          { id: "soy_voluntario", title: "Sí, soy voluntario" },
-          { id: "necesito_ayuda", title: "Necesito ayuda" },
-          { id: "menu_salir", title: "🚪 Salir" },
+        await sendButtons(from, "Elegí una opción:", BOTONES_MEMBRESIA);
+      }
+      return;
+    }
+
+    case "post_inventario_ayuda": {
+      if (buttonId === "si_encontro") {
+        await sendReply(from, "¡Qué bueno! 🙏 Te contactaremos a la brevedad. No estás solo/a en esto.");
+        await clearSession(from);
+      } else if (buttonId === "no_encontro") {
+        await sendReply(from, "Contame un poco de vos para poder ayudarte mejor. ¿Cuál es tu nombre y apellido?");
+        await setSession(from, "pedido_nombre");
+      } else {
+        await sendButtons(from, "¿Pudiste encontrar lo que buscabas?", [
+          { id: "si_encontro", title: "Sí" },
+          { id: "no_encontro", title: "No" },
         ]);
       }
+      return;
+    }
+
+    case "pedido_nombre": {
+      if (!texto) { await sendReply(from, "Decime tu nombre y apellido:"); return; }
+      await setSession(from, "pedido_telefono", { ...data, nombre: texto });
+      await sendReply(from, "¿Cuál es tu número de teléfono de contacto?");
+      return;
+    }
+
+    case "pedido_telefono": {
+      if (!texto) { await sendReply(from, "Decime tu número de teléfono de contacto:"); return; }
+      await setSession(from, "pedido_direccion", { ...data, telefono: texto });
+      await sendReply(from, "¿Cuál es tu dirección?");
+      return;
+    }
+
+    case "pedido_direccion": {
+      if (!texto) { await sendReply(from, "Decime tu dirección:"); return; }
+      await setSession(from, "pedido_tipo_lugar", { ...data, direccion: texto });
+      await sendButtons(from, "¿Qué tipo de lugar sos?", TIPO_LUGAR_BOTONES);
+      return;
+    }
+
+    case "pedido_tipo_lugar": {
+      if (!TIPO_LUGAR_LABEL[buttonId]) {
+        await sendButtons(from, "Elegí una opción:", TIPO_LUGAR_BOTONES);
+        return;
+      }
+      await setSession(from, "pedido_productos", { ...data, tipo_lugar: buttonId });
+      await sendReply(
+        from,
+        "Contame qué necesitás. Tratá de ser lo más específico posible (por ejemplo \"analgésicos\" en vez de " +
+        "\"medicina\", o \"ropa de niño talle 4\" en vez de \"ropa\") — así podemos ayudarte mejor y más rápido 🙏"
+      );
+      return;
+    }
+
+    case "pedido_productos": {
+      if (!texto) { await sendReply(from, "Contame qué necesitás:"); return; }
+      const analisis = await analizarNecesidad(texto);
+      if (!analisis.especifico) {
+        await sendReply(from, analisis.pregunta_aclaratoria || "¿Me lo podés detallar un poco más?");
+        return;
+      }
+      await finalizarPedido(from, data, analisis.productos);
+      await clearSession(from);
       return;
     }
 
@@ -353,11 +502,7 @@ async function handleIncomingMessage(from, msg) {
 
     default: {
       await clearSession(from);
-      await sendButtons(from, "¡Hola! Somos SOS Venezuela 🇻🇪\n¿Sos parte del equipo de voluntarios?", [
-        { id: "soy_voluntario", title: "Sí, soy voluntario" },
-        { id: "necesito_ayuda", title: "Necesito ayuda" },
-      ]);
-      await setSession(from, "esperando_membresia");
+      await sendBienvenida(from);
     }
   }
 }
