@@ -144,6 +144,28 @@ document.addEventListener('DOMContentLoaded', function () {
     }).catch(function () {});
   }
 
+  /* ---- Inventario disponible ---- */
+  function loadInventario() {
+    var box = $('inv-list-body'); if (!box) return;
+    fetch(API + '/api/transparency/inventario').then(function (r) { return r.json(); }).then(function (list) {
+      if (!Array.isArray(list)) return;
+      var enStock = list.filter(function (it) { return Number(it.cantidad) > 0; });
+      if (!enStock.length) {
+        box.innerHTML = '<div class="don-list-row" style="grid-template-columns:1fr"><span style="color:#8a7f73">' +
+          (lang === 'en' ? 'No supplies in stock right now.' : 'No hay insumos en stock por el momento.') + '</span></div>';
+        return;
+      }
+      box.innerHTML = enStock.map(function (it) {
+        return '<div class="don-list-row">' +
+          '<span>' + escapeHtml(it.producto || '') + '</span>' +
+          '<span>' + escapeHtml(String(it.cantidad || 0)) + ' ' + escapeHtml(it.unidad || '') + '</span>' +
+          '<span>' + (it.precio_unitario ? esNum(it.precio_unitario) : '—') + '</span>' +
+          '<span style="color:#8a7f73;font-size:11px">' + escapeHtml(it.ultima_actualizacion || '') + '</span>' +
+          '</div>';
+      }).join('');
+    }).catch(function () {});
+  }
+
   /* ---- Galería de transparencia (facturas + entregas con foto) ---- */
   function txCardHTML(cat, badge, badgeColor, imgUrl, title, sub, idx) {
     var inner = imgUrl
@@ -271,8 +293,9 @@ document.addEventListener('DOMContentLoaded', function () {
   loadRate(function () { loadTransparency(); });
   loadSummary();
   loadDonations();
+  loadInventario();
   connectSSE();
-  setInterval(function () { loadSummary(); loadRate(loadTransparency); }, 60000);
+  setInterval(function () { loadSummary(); loadRate(loadTransparency); loadInventario(); }, 60000);
 
   /* ---- Transparency filter ---- */
   function applyFilter(f) {
