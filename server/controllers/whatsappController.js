@@ -178,6 +178,13 @@ const MENU_ROWS = [
   { id: "menu_entrega", title: "🚚 Registrar entrega" },
   { id: "menu_inventario", title: "📋 Ver inventario" },
   { id: "menu_necesidades", title: "🆘 Ver necesidades" },
+  { id: "menu_salir", title: "🚪 Salir" },
+];
+
+// Cualquier estado post-saludo donde "Salir" (botón o texto) corta la sesión en cualquier momento
+const ESTADOS_CON_SALIR = [
+  "esperando_membresia", "esperando_cedula", "esperando_pin", "auth_fallida",
+  "menu", "esperando_num_entrega", "esperando_foto_factura", "esperando_foto_entrega",
 ];
 
 async function sendMenu(from, nombre) {
@@ -228,6 +235,13 @@ async function handleIncomingMessage(from, msg) {
     : null;
   const esImagen = msg.type === "image";
 
+  const quiereSalir = buttonId === "menu_salir" || texto.toLowerCase() === "salir";
+  if (ESTADOS_CON_SALIR.includes(estado) && quiereSalir) {
+    await sendReply(from, "👋 Sesión cerrada. Escribí *hola* cuando quieras volver a empezar.");
+    await clearSession(from);
+    return;
+  }
+
   switch (estado) {
     case "inicio": {
       await sendButtons(from, "¡Hola! Somos SOS Venezuela 🇻🇪\n¿Sos parte del equipo de voluntarios?", [
@@ -240,7 +254,7 @@ async function handleIncomingMessage(from, msg) {
 
     case "esperando_membresia": {
       if (buttonId === "soy_voluntario") {
-        await sendReply(from, "Decime tu número de cédula:");
+        await sendReply(from, "Decime tu número de cédula (podés escribir 'salir' en cualquier momento para cortar):");
         await setSession(from, "esperando_cedula");
       } else if (buttonId === "necesito_ayuda") {
         await sendReply(from, "Esta opción va a estar disponible muy pronto 🙏. Por ahora escribinos a nuestras redes.");
@@ -249,20 +263,21 @@ async function handleIncomingMessage(from, msg) {
         await sendButtons(from, "Elegí una opción:", [
           { id: "soy_voluntario", title: "Sí, soy voluntario" },
           { id: "necesito_ayuda", title: "Necesito ayuda" },
+          { id: "menu_salir", title: "🚪 Salir" },
         ]);
       }
       return;
     }
 
     case "esperando_cedula": {
-      if (!texto) { await sendReply(from, "Escribime tu número de cédula:"); return; }
+      if (!texto) { await sendReply(from, "Escribime tu número de cédula (o 'salir' para cortar):"); return; }
       await setSession(from, "esperando_pin", { cedula: texto });
       await sendReply(from, "Ahora tu PIN de 4 dígitos:");
       return;
     }
 
     case "esperando_pin": {
-      if (!texto) { await sendReply(from, "Escribime tu PIN de 4 dígitos:"); return; }
+      if (!texto) { await sendReply(from, "Escribime tu PIN de 4 dígitos (o 'salir' para cortar):"); return; }
       const voluntario = await getVoluntario(data.cedula, texto);
       if (voluntario) {
         await sendMenu(from, voluntario.nombre);
