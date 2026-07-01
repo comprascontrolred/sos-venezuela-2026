@@ -2,9 +2,10 @@ import { registerDonation, getDonations } from "./sheetsAgent.js";
 import { broadcast } from "./sseManager.js";
 
 const WALLET = process.env.BINANCE_WALLET_ADDRESS;
+const TRON_API_KEY = process.env.TRON_API_KEY;
 const USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"; // USDT TRC20
 const POLL_INTERVAL = 30_000; // 30 segundos
-const TRON_API = "https://apilist.tronscanapi.com/api/token_trc20/transfers";
+const TRON_API = "https://api.trongrid.io";
 
 const knownTxHashes = new Set();
 let initialized = false;
@@ -20,18 +21,19 @@ async function loadExistingHashes() {
 }
 
 async function fetchRecentTransfers() {
-  const url = `${TRON_API}?toAddress=${WALLET}&tokenAddress=${USDT_CONTRACT}&limit=10&start=0`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`TronScan HTTP ${res.status}`);
+  const url = `${TRON_API}/v1/accounts/${WALLET}/transactions/trc20?only_to=true&contract_address=${USDT_CONTRACT}&limit=20`;
+  const res = await fetch(url, { headers: TRON_API_KEY ? { "TRON-PRO-API-KEY": TRON_API_KEY } : {} });
+  if (!res.ok) throw new Error(`TronGrid HTTP ${res.status}`);
   const data = await res.json();
-  return data.token_transfers ?? [];
+  return data.data ?? [];
 }
 
 async function processTransfer(tx) {
   const txHash = tx.transaction_id;
   if (knownTxHashes.has(txHash)) return;
 
-  const amountUsd = Number(tx.quant) / 1_000_000; // USDT tiene 6 decimales
+  const decimals = tx.token_info?.decimals ?? 6;
+  const amountUsd = Number(tx.value) / 10 ** decimals;
   knownTxHashes.add(txHash);
 
   const data = await registerDonation({

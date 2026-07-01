@@ -168,6 +168,78 @@ export async function getEntregas() {
   });
 }
 
+// ── Voluntarios ────────────────────────────────────────────────────────────
+
+export async function getVoluntario(cedula, pin) {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "Voluntarios!A:D" });
+  const rows = res.data.values ?? [];
+  const headers = ["cedula", "pin", "nombre", "activo"];
+  const voluntarios = rows.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])));
+
+  const match = voluntarios.find((v) => v.cedula === String(cedula).trim() && v.pin === String(pin).trim());
+  if (!match) return null;
+  if (String(match.activo).trim().toUpperCase() !== "SI" && String(match.activo).trim().toUpperCase() !== "TRUE") return null;
+  return { nombre: match.nombre };
+}
+
+// ── Sesiones de WhatsApp ───────────────────────────────────────────────────
+
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutos
+
+async function findSessionRow(from) {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "Sesiones!A:D" });
+  const rows = res.data.values ?? [];
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === from) return { row: i + 1, values: rows[i] };
+  }
+  return null;
+}
+
+export async function getSession(from) {
+  const found = await findSessionRow(from);
+  if (!found) return null;
+
+  const [, estado, dataJson, updatedAt] = found.values;
+  if (updatedAt && Date.now() - new Date(updatedAt).getTime() > SESSION_TIMEOUT_MS) return null;
+
+  let data = {};
+  try { data = JSON.parse(dataJson || "{}"); } catch { data = {}; }
+  return { estado, data, updated_at: updatedAt };
+}
+
+export async function setSession(from, estado, data = {}) {
+  const ahora = new Date().toISOString();
+  const values = [[from, estado, JSON.stringify(data), ahora]];
+  const found = await findSessionRow(from);
+
+  if (found) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `Sesiones!A${found.row}:D${found.row}`,
+      valueInputOption: "RAW",
+      requestBody: { values },
+    });
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: "Sesiones!A:D",
+      valueInputOption: "RAW",
+      requestBody: { values },
+    });
+  }
+}
+
+export async function clearSession(from) {
+  const found = await findSessionRow(from);
+  if (!found) return;
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `Sesiones!A${found.row}:D${found.row}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[from, "", "", ""]] },
+  });
+}
+
 // ── Transparencia pública ──────────────────────────────────────────────────
 
 export async function getTransparencia() {

@@ -14,6 +14,8 @@ const HEADERS = {
   GASTOS:      [["id","numero_factura","fecha","proveedor","total","moneda","items_json","driveUrl","driveViewUrl","from"]],
   Entregas:    [["id","fecha","numero_factura","hospital","items_json","driveUrl","driveViewUrl","from"]],
   Inventario:  [["id","producto","cantidad","unidad","precio_unitario","ultima_actualizacion"]],
+  Voluntarios: [["cedula","pin","nombre","activo"]],
+  Sesiones:    [["from","estado","data_json","updated_at"]],
 };
 
 // Nombres actuales → nombres nuevos
@@ -50,9 +52,24 @@ async function run() {
     });
   }
 
-  // 3. Escribir encabezados en cada pestaña
+  // 3. Crear las pestañas que falten
   const { data: data2 } = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
-  const finalTitles = data2.sheets.map((s) => s.properties.title);
+  const existingTitles = data2.sheets.map((s) => s.properties.title);
+  const addRequests = Object.keys(HEADERS)
+    .filter((tabName) => !existingTitles.includes(tabName))
+    .map((tabName) => ({ addSheet: { properties: { title: tabName } } }));
+
+  if (addRequests.length > 0) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: addRequests },
+    });
+    addRequests.forEach((r) => console.log(`➕ Pestaña creada: "${r.addSheet.properties.title}"`));
+  }
+
+  // 4. Escribir encabezados en cada pestaña
+  const { data: data3 } = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  const finalTitles = data3.sheets.map((s) => s.properties.title);
   console.log("Pestañas finales:", finalTitles.join(", "));
 
   for (const [tabName, headers] of Object.entries(HEADERS)) {
