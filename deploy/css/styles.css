@@ -544,6 +544,25 @@ a { text-decoration: none; color: inherit; }
 .footer-links { display: flex; flex-direction: column; gap: 9px; font: 500 13px 'Public Sans', sans-serif; color: rgba(255,255,255,.8); }
 .footer-links span { cursor: pointer; }
 
+/* Botón flotante de WhatsApp */
+.whatsapp-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 90;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #25D366;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(37,211,102,.45);
+  transition: transform .15s ease;
+}
+.whatsapp-fab:hover { transform: scale(1.08); }
+.whatsapp-fab svg { width: 30px; height: 30px; }
+
 /* Modal */
 .modal-overlay {
   display: none;

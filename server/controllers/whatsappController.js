@@ -9,6 +9,7 @@ import {
   upsertInventarioItem,
   deductInventarioItems,
   getInventario,
+  getNecesidades,
   getVoluntario,
   getSession,
   setSession,
@@ -56,6 +57,24 @@ async function sendButtons(to, body, buttons) {
         type: "button",
         body: { text: body },
         action: { buttons: buttons.map(({ id, title }) => ({ type: "reply", reply: { id, title } })) },
+      },
+    },
+    { headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" } }
+  );
+}
+
+// rows: array de hasta 10 { id, title, description? }
+async function sendList(to, body, buttonText, rows) {
+  await axios.post(
+    `https://graph.facebook.com/v19.0/${WA_PHONE_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to,
+      type: "interactive",
+      interactive: {
+        type: "list",
+        body: { text: body },
+        action: { button: buttonText, sections: [{ rows }] },
       },
     },
     { headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" } }
@@ -154,14 +173,15 @@ async function handleEntrega(from, buffer, mimeType, numeroFactura) {
 
 // ── Menú y bienvenida ────────────────────────────────────────────────────────
 
-const MENU_BUTTONS = [
+const MENU_ROWS = [
   { id: "menu_factura", title: "📦 Subir factura" },
   { id: "menu_entrega", title: "🚚 Registrar entrega" },
   { id: "menu_inventario", title: "📋 Ver inventario" },
+  { id: "menu_necesidades", title: "🆘 Ver necesidades" },
 ];
 
 async function sendMenu(from, nombre) {
-  await sendButtons(from, `¡Hola ${nombre || ""}! ¿Qué querés hacer?`, MENU_BUTTONS);
+  await sendList(from, `¡Hola ${nombre || ""}! ¿Qué querés hacer?`, "Elegir opción", MENU_ROWS);
   await setSession(from, "menu", { nombre });
 }
 
@@ -173,6 +193,28 @@ async function enviarInventarioTexto(from) {
   await sendReply(from, `📋 *Inventario disponible:*\n${texto}`);
 }
 
+function esRealizada(n) {
+  return n.estado.trim().toUpperCase() === "REALIZADA";
+}
+
+async function enviarNecesidadesTexto(from) {
+  const necesidades = await getNecesidades();
+  if (!necesidades.length) {
+    await sendReply(from, "🆘 *Necesidades actuales:*\nNo hay necesidades cargadas por el momento.");
+    return;
+  }
+
+  // Pendientes primero, realizadas al final (se conservan como registro, no se borran)
+  const ordenadas = [...necesidades].sort((a, b) => Number(esRealizada(a)) - Number(esRealizada(b)));
+
+  const texto = ordenadas.map((n) => {
+    const linea = `${n.descripcion}${n.organizacion ? ` (${n.organizacion})` : ""}${n.prioridad ? ` — prioridad: ${n.prioridad}` : ""}`;
+    return esRealizada(n) ? `✅ ~${linea}~ (realizada)` : `• ${linea}`;
+  }).join("\n");
+
+  await sendReply(from, `🆘 *Necesidades actuales:*\n${texto}`);
+}
+
 // ── Dispatcher de conversación ──────────────────────────────────────────────
 
 async function handleIncomingMessage(from, msg) {
@@ -181,7 +223,9 @@ async function handleIncomingMessage(from, msg) {
   const data = session.data || {};
 
   const texto = msg.type === "text" ? (msg.text?.body || "").trim() : "";
-  const buttonId = msg.type === "interactive" ? msg.interactive?.button_reply?.id : null;
+  const buttonId = msg.type === "interactive"
+    ? (msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id)
+    : null;
   const esImagen = msg.type === "image";
 
   switch (estado) {
@@ -251,6 +295,9 @@ async function handleIncomingMessage(from, msg) {
         await setSession(from, "esperando_num_entrega", data);
       } else if (buttonId === "menu_inventario") {
         await enviarInventarioTexto(from);
+        await setSession(from, "menu", data);
+      } else if (buttonId === "menu_necesidades") {
+        await enviarNecesidadesTexto(from);
         await setSession(from, "menu", data);
       } else {
         await sendMenu(from, data.nombre);

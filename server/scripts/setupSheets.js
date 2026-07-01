@@ -16,6 +16,7 @@ const HEADERS = {
   Inventario:  [["id","producto","cantidad","unidad","precio_unitario","ultima_actualizacion"]],
   Voluntarios: [["cedula","pin","nombre","activo"]],
   Sesiones:    [["from","estado","data_json","updated_at"]],
+  Necesidades: [["id","descripcion","organizacion","prioridad","estado","fecha"]],
 };
 
 // Nombres actuales → nombres nuevos

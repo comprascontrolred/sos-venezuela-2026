@@ -170,13 +170,19 @@ export async function getEntregas() {
 
 // ── Voluntarios ────────────────────────────────────────────────────────────
 
+// Deja solo dígitos: acepta "25.123.456", "25-123-456", "V-25123456" o el número corrido.
+function soloDigitos(s) {
+  return String(s ?? "").replace(/\D/g, "");
+}
+
 export async function getVoluntario(cedula, pin) {
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "Voluntarios!A:D" });
   const rows = res.data.values ?? [];
   const headers = ["cedula", "pin", "nombre", "activo"];
   const voluntarios = rows.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])));
 
-  const match = voluntarios.find((v) => v.cedula === String(cedula).trim() && v.pin === String(pin).trim());
+  const cedulaBuscada = soloDigitos(cedula);
+  const match = voluntarios.find((v) => soloDigitos(v.cedula) === cedulaBuscada && String(v.pin).trim() === String(pin).trim());
   if (!match) return null;
   if (String(match.activo).trim().toUpperCase() !== "SI" && String(match.activo).trim().toUpperCase() !== "TRUE") return null;
   return { nombre: match.nombre };
@@ -238,6 +244,15 @@ export async function clearSession(from) {
     valueInputOption: "RAW",
     requestBody: { values: [[from, "", "", ""]] },
   });
+}
+
+// ── Necesidades (cargadas a mano por quien gestiona las compras) ───────────
+
+export async function getNecesidades() {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "Necesidades!A:F" });
+  const rows = res.data.values ?? [];
+  const headers = ["id", "descripcion", "organizacion", "prioridad", "estado", "fecha"];
+  return rows.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])));
 }
 
 // ── Transparencia pública ──────────────────────────────────────────────────
