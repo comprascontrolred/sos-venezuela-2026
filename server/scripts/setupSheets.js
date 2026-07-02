@@ -18,6 +18,7 @@ const HEADERS = {
   Sesiones:    [["from","estado","data_json","updated_at"]],
   Necesidades: [["id","descripcion","organizacion","prioridad","estado","fecha"]],
   Pedidos:     [["id","fecha","nombre","telefono","direccion","tipo_lugar","estatus_inventario","productos_json","cobertura","from"]],
+  UsoGemini:   [["id","fecha","hora","tipo","tokens_prompt","tokens_respuesta","tokens_total"]],
 };
 
 // Nombres actuales → nombres nuevos

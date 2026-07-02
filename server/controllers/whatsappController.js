@@ -13,6 +13,7 @@ import {
   getVoluntario,
   registerPedido,
   revisarPedidosPendientes,
+  getUsoGeminiHoy,
   getSession,
   setSession,
   clearSession,
@@ -45,6 +46,23 @@ async function sendReply(to, body) {
     `https://graph.facebook.com/v19.0/${WA_PHONE_ID}/messages`,
     { messaging_product: "whatsapp", to, type: "text", text: { body } },
     { headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" } }
+  );
+}
+
+// Límites reales del free tier de gemini-2.5-flash (ver ai.google.dev/gemini-api/docs/rate-limits)
+const GEMINI_RPD_LIMIT = 1500;
+
+async function enviarUsoGemini(from) {
+  const { llamadas, tokensTotal, porTipo } = await getUsoGeminiHoy();
+  const porcentaje = Math.round((llamadas / GEMINI_RPD_LIMIT) * 100);
+  const detalle = Object.entries(porTipo).map(([tipo, n]) => `  • ${tipo}: ${n}`).join("\n") || "  (sin llamadas todavía)";
+
+  await sendReply(
+    from,
+    `📊 *Uso de Gemini — hoy*\n` +
+    `🔢 Llamadas: ${llamadas} / ${GEMINI_RPD_LIMIT} (${porcentaje}%)\n` +
+    `🧮 Tokens usados: ${tokensTotal.toLocaleString("es-AR")} (informativo — el límite real es 1.000.000 por *minuto*, muy por encima de este volumen)\n\n` +
+    `📋 Detalle:\n${detalle}`
   );
 }
 
@@ -327,6 +345,12 @@ async function handleIncomingMessage(from, msg) {
     ? (msg.interactive?.button_reply?.id || msg.interactive?.list_reply?.id)
     : null;
   const esImagen = msg.type === "image";
+
+  // Comando admin-only: no toca la sesión, funciona en cualquier momento
+  if (ADMIN_NUMBER && from === ADMIN_NUMBER && ["tokens", "cuota"].includes(texto.toLowerCase())) {
+    await enviarUsoGemini(from);
+    return;
+  }
 
   const quiereSalir = buttonId === "menu_salir" || texto.toLowerCase() === "salir";
   if (quiereSalir && (ESTADOS_SALIR_VOLUNTARIO.includes(estado) || ESTADOS_SALIR_AYUDA.includes(estado))) {

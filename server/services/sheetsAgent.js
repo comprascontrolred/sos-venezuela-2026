@@ -255,6 +255,43 @@ export async function getNecesidades() {
   return rows.slice(1).map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])));
 }
 
+// ── Uso de Gemini (para el comando "tokens" del admin) ──────────────────────
+
+export async function registerUsoGemini({ tipo, tokens_prompt, tokens_respuesta, tokens_total }) {
+  const ahora = new Date();
+  const fecha = ahora.toISOString().split("T")[0];
+  const hora = ahora.toISOString().split("T")[1].slice(0, 8);
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: "UsoGemini!A:G",
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [[uuid(), fecha, hora, tipo, tokens_prompt ?? 0, tokens_respuesta ?? 0, tokens_total ?? 0]],
+    },
+  });
+}
+
+export async function getUsoGeminiHoy() {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "UsoGemini!A:G" });
+  const rows = res.data.values ?? [];
+  const headers = ["id", "fecha", "hora", "tipo", "tokens_prompt", "tokens_respuesta", "tokens_total"];
+  const hoy = new Date().toISOString().split("T")[0];
+
+  const registros = rows.slice(1)
+    .map((r) => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ""])))
+    .filter((r) => r.fecha === hoy);
+
+  const porTipo = {};
+  let tokensTotal = 0;
+  for (const r of registros) {
+    porTipo[r.tipo] = (porTipo[r.tipo] || 0) + 1;
+    tokensTotal += Number(r.tokens_total) || 0;
+  }
+
+  return { llamadas: registros.length, tokensTotal, porTipo };
+}
+
 // ── Pedidos (gente externa que pide ayuda por WhatsApp) ─────────────────────
 
 const PEDIDO_MATCH_THRESHOLD = 0.3; // más laxo que facturas: acá es lenguaje natural, no OCR
