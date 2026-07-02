@@ -19,6 +19,7 @@ const HEADERS = {
   Necesidades: [["id","descripcion","organizacion","prioridad","estado","fecha"]],
   Pedidos:     [["id","fecha","nombre","telefono","direccion","tipo_lugar","estatus_inventario","productos_json","cobertura","from"]],
   UsoGemini:   [["id","fecha","hora","tipo","tokens_prompt","tokens_respuesta","tokens_total"]],
+  UsoWhatsApp: [["id","fecha","hora","tipo_mensaje"]],
 };
 
 // Nombres actuales → nombres nuevos

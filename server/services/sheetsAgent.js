@@ -292,6 +292,29 @@ export async function getUsoGeminiHoy() {
   return { llamadas: registros.length, tokensTotal, porTipo };
 }
 
+// ── Uso de WhatsApp / Meta Graph API (para el comando "tokens" del admin) ───
+
+export async function registerUsoWhatsApp(tipoMensaje) {
+  const ahora = new Date();
+  const fecha = ahora.toISOString().split("T")[0];
+  const hora = ahora.toISOString().split("T")[1].slice(0, 8);
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SPREADSHEET_ID,
+    range: "UsoWhatsApp!A:D",
+    valueInputOption: "RAW",
+    requestBody: { values: [[uuid(), fecha, hora, tipoMensaje ?? ""]] },
+  });
+}
+
+export async function getUsoWhatsAppHoy() {
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "UsoWhatsApp!A:D" });
+  const rows = res.data.values ?? [];
+  const hoy = new Date().toISOString().split("T")[0];
+  const enviadosHoy = rows.slice(1).filter((r) => r[1] === hoy);
+  return { mensajesEnviados: enviadosHoy.length };
+}
+
 // ── Pedidos (gente externa que pide ayuda por WhatsApp) ─────────────────────
 
 const PEDIDO_MATCH_THRESHOLD = 0.3; // más laxo que facturas: acá es lenguaje natural, no OCR

@@ -14,6 +14,8 @@ import {
   registerPedido,
   revisarPedidosPendientes,
   getUsoGeminiHoy,
+  registerUsoWhatsApp,
+  getUsoWhatsAppHoy,
   getSession,
   setSession,
   clearSession,
@@ -41,19 +43,27 @@ function verifySignature(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-async function sendReply(to, body) {
+async function postToGraph(payload) {
   await axios.post(
     `https://graph.facebook.com/v19.0/${WA_PHONE_ID}/messages`,
-    { messaging_product: "whatsapp", to, type: "text", text: { body } },
+    payload,
     { headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" } }
   );
+  registerUsoWhatsApp(payload.type).catch((err) => console.error("[WA] Error registrando uso:", err.message));
+}
+
+async function sendReply(to, body) {
+  await postToGraph({ messaging_product: "whatsapp", to, type: "text", text: { body } });
 }
 
 // Límites reales del free tier de gemini-2.5-flash (ver ai.google.dev/gemini-api/docs/rate-limits)
 const GEMINI_RPD_LIMIT = 1500;
 
 async function enviarUsoGemini(from) {
-  const { llamadas, tokensTotal, porTipo } = await getUsoGeminiHoy();
+  const [{ llamadas, tokensTotal, porTipo }, { mensajesEnviados }] = await Promise.all([
+    getUsoGeminiHoy(),
+    getUsoWhatsAppHoy(),
+  ]);
   const porcentaje = Math.round((llamadas / GEMINI_RPD_LIMIT) * 100);
   const detalle = Object.entries(porTipo).map(([tipo, n]) => `  • ${tipo}: ${n}`).join("\n") || "  (sin llamadas todavía)";
 
@@ -62,7 +72,12 @@ async function enviarUsoGemini(from) {
     `📊 *Uso de Gemini — hoy*\n` +
     `🔢 Llamadas: ${llamadas} / ${GEMINI_RPD_LIMIT} (${porcentaje}%)\n` +
     `🧮 Tokens usados: ${tokensTotal.toLocaleString("es-AR")} (informativo — el límite real es 1.000.000 por *minuto*, muy por encima de este volumen)\n\n` +
-    `📋 Detalle:\n${detalle}`
+    `📋 Detalle:\n${detalle}\n\n` +
+    `📱 *Uso de WhatsApp (Meta) — hoy*\n` +
+    `✉️ Mensajes enviados: ${mensajesEnviados}\n` +
+    `ℹ️ Meta no expone un cupo fijo simple como Gemini — el límite real depende del "tier de mensajería" de tu número ` +
+    `(cuántas conversaciones *únicas* podés iniciar por día, no mensajes sueltos). Este contador es nuestro propio registro ` +
+    `de mensajes salientes, útil para ver volumen y detectar picos raros.`
   );
 }
 
@@ -77,38 +92,30 @@ async function notifyAdmin(text) {
 
 // buttons: array de hasta 3 { id, title }
 async function sendButtons(to, body, buttons) {
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${WA_PHONE_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to,
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: { text: body },
-        action: { buttons: buttons.map(({ id, title }) => ({ type: "reply", reply: { id, title } })) },
-      },
+  await postToGraph({
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "button",
+      body: { text: body },
+      action: { buttons: buttons.map(({ id, title }) => ({ type: "reply", reply: { id, title } })) },
     },
-    { headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" } }
-  );
+  });
 }
 
 // rows: array de hasta 10 { id, title, description? }
 async function sendList(to, body, buttonText, rows) {
-  await axios.post(
-    `https://graph.facebook.com/v19.0/${WA_PHONE_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to,
-      type: "interactive",
-      interactive: {
-        type: "list",
-        body: { text: body },
-        action: { button: buttonText, sections: [{ rows }] },
-      },
+  await postToGraph({
+    messaging_product: "whatsapp",
+    to,
+    type: "interactive",
+    interactive: {
+      type: "list",
+      body: { text: body },
+      action: { button: buttonText, sections: [{ rows }] },
     },
-    { headers: { Authorization: `Bearer ${WA_TOKEN}`, "Content-Type": "application/json" } }
-  );
+  });
 }
 
 async function downloadImage(imageId) {
@@ -223,9 +230,9 @@ const MENU_ROWS = [
 ];
 
 const MENSAJE_BIENVENIDA =
-  "¡Hola! 👋🇦🇷🇻🇪 Somos *SOS Venezuela*, una iniciativa de *Control Red* 🔴, *Redvision* 📡 y *Caracas Market* 🛒 — " +
+  "¡Hola! 🇦🇷🇻🇪 Somos *SOS Venezuela*, una iniciativa de *Control Red*, *Redvision* y *Caracas Market* — " +
   "empresas argentinas que decidimos ayudar a nuestros hermanos venezolanos 💛. Contamos con equipo propio " +
-  "operando directamente en Caracas 🇻🇪, así que podemos asegurarnos de que la ayuda realmente llegue, y " +
+  "operando directamente en Caracas, así que podemos asegurarnos de que la ayuda realmente llegue, y " +
   "estamos para acompañarte en lo que necesites 🙏.\n\n¿Sos parte del equipo de voluntarios? 🤝";
 
 const BOTONES_MEMBRESIA = [
@@ -245,8 +252,13 @@ const ESTADOS_SALIR_VOLUNTARIO = [
   "menu", "esperando_num_entrega", "esperando_foto_factura", "esperando_foto_entrega",
 ];
 const ESTADOS_SALIR_AYUDA = [
-  "esperando_membresia", "post_inventario_ayuda",
+  "esperando_membresia", "menu_ayuda", "post_inventario_ayuda",
   "pedido_nombre", "pedido_telefono", "pedido_direccion", "pedido_tipo_lugar", "pedido_productos", "pedido_confirmar_mas",
+];
+
+const MENU_AYUDA_BOTONES = [
+  { id: "ver_inventario_ayuda", title: "📋 Ver inventario" },
+  { id: "solicitar_ayuda", title: "🆘 Solicitar ayuda" },
 ];
 const MENSAJE_SALIDA_VOLUNTARIO =
   "🙏💛 ¡Muchas gracias por ayudarnos a lograr esta gran tarea! Argentina 🇦🇷 y Venezuela 🇻🇪 son países hermanos. ¡Nos vemos pronto! ✨";
@@ -300,7 +312,11 @@ const TIPO_LUGAR_LABEL = {
   lugar_acopio: "Centro de acopio",
 };
 
-const ESTATUS_LABEL = { en_stock: "🟢 En stock (lo vio en el inventario)", sin_stock: "🔴 Sin stock (no lo encontró)" };
+const ESTATUS_LABEL = {
+  en_stock: "🟢 En stock (lo vio en el inventario)",
+  sin_stock: "🔴 Sin stock (no lo encontró)",
+  no_consultado: "⚪ No llegó a revisar el inventario",
+};
 
 function checklistProductos(productosMatch) {
   return productosMatch.map((p) => `${p.en_stock ? "✅" : "❌"} ${p.producto}`).join("\n");
@@ -371,15 +387,27 @@ async function handleIncomingMessage(from, msg) {
         await sendReply(from, "¡Genial! 🙌 Decime tu número de cédula (podés escribir 'salir' en cualquier momento para cortar):");
         await setSession(from, "esperando_cedula");
       } else if (buttonId === "necesito_ayuda") {
-        await sendReply(from, "💛 Contamos con vos, queremos ayudarte. Primero mirá qué tenemos disponible ahora mismo 👇");
+        await sendButtons(from, "💛 Contamos con vos, queremos ayudarte. ¿Qué querés hacer?", MENU_AYUDA_BOTONES);
+        await setSession(from, "menu_ayuda");
+      } else {
+        await sendButtons(from, "Elegí una opción: 👇", BOTONES_MEMBRESIA);
+      }
+      return;
+    }
+
+    case "menu_ayuda": {
+      if (buttonId === "ver_inventario_ayuda") {
         await enviarInventarioTexto(from);
         await sendButtons(from, "¿Pudiste encontrar lo que buscabas? 🔎", [
           { id: "si_encontro", title: "✅ Sí" },
           { id: "no_encontro", title: "❌ No" },
         ]);
         await setSession(from, "post_inventario_ayuda");
+      } else if (buttonId === "solicitar_ayuda") {
+        await sendReply(from, "No te preocupes, te vamos a ayudar a conseguirlo 💪. Contame un poco de vos para poder ayudarte mejor 🙏. ¿Cuál es tu nombre y apellido? ✍️");
+        await setSession(from, "pedido_nombre", { estatus_inventario: "no_consultado" });
       } else {
-        await sendButtons(from, "Elegí una opción: 👇", BOTONES_MEMBRESIA);
+        await sendButtons(from, "¿Qué querés hacer? 👇", MENU_AYUDA_BOTONES);
       }
       return;
     }
