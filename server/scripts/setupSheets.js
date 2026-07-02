@@ -17,7 +17,7 @@ const HEADERS = {
   Voluntarios: [["cedula","pin","nombre","activo"]],
   Sesiones:    [["from","estado","data_json","updated_at"]],
   Necesidades: [["id","descripcion","organizacion","prioridad","estado","fecha"]],
-  Pedidos:     [["id","fecha","nombre","telefono","direccion","tipo_lugar","productos_json","cobertura","from"]],
+  Pedidos:     [["id","fecha","nombre","telefono","direccion","tipo_lugar","estatus_inventario","productos_json","cobertura","from"]],
 };
 
 // Nombres actuales → nombres nuevos

@@ -273,7 +273,7 @@ function calcularCobertura(productosMatch) {
   return "ninguna";
 }
 
-export async function registerPedido({ nombre, telefono, direccion, tipo_lugar, productos, whatsappFrom }) {
+export async function registerPedido({ nombre, telefono, direccion, tipo_lugar, estatus_inventario, productos, whatsappFrom }) {
   const id = uuid();
   const fecha = new Date().toISOString().split("T")[0];
   const productosMatch = await matchearProductos(productos);
@@ -281,10 +281,10 @@ export async function registerPedido({ nombre, telefono, direccion, tipo_lugar, 
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
-    range: "Pedidos!A:I",
+    range: "Pedidos!A:J",
     valueInputOption: "RAW",
     requestBody: {
-      values: [[id, fecha, nombre ?? "", telefono ?? "", direccion ?? "", tipo_lugar ?? "", JSON.stringify(productosMatch), cobertura, whatsappFrom]],
+      values: [[id, fecha, nombre ?? "", telefono ?? "", direccion ?? "", tipo_lugar ?? "", estatus_inventario ?? "", JSON.stringify(productosMatch), cobertura, whatsappFrom]],
     },
   });
 
@@ -292,9 +292,9 @@ export async function registerPedido({ nombre, telefono, direccion, tipo_lugar, 
 }
 
 export async function getPedidos() {
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "Pedidos!A:I" });
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: "Pedidos!A:J" });
   const rows = res.data.values ?? [];
-  const headers = ["id", "fecha", "nombre", "telefono", "direccion", "tipo_lugar", "productos_json", "cobertura", "from"];
+  const headers = ["id", "fecha", "nombre", "telefono", "direccion", "tipo_lugar", "estatus_inventario", "productos_json", "cobertura", "from"];
   return rows.slice(1).map((r, i) => {
     const obj = Object.fromEntries(headers.map((h, j) => [h, r[j] ?? ""]));
     try { obj.productos = JSON.parse(obj.productos_json); } catch { obj.productos = []; }
@@ -315,7 +315,7 @@ export async function revisarPedidosPendientes() {
     if (cobertura !== pedido.cobertura) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `Pedidos!G${pedido._row}:H${pedido._row}`,
+        range: `Pedidos!H${pedido._row}:I${pedido._row}`,
         valueInputOption: "RAW",
         requestBody: { values: [[JSON.stringify(productosMatch), cobertura]] },
       });
